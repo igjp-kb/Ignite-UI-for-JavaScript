@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+
+    <!-- Ignite UI Required Combined CSS Files -->
+    <link href="http://cdn-na.infragistics.com/igniteui/2019.2/latest/css/themes/metro/infragistics.theme.css" rel="stylesheet" />
+    <link href="http://cdn-na.infragistics.com/igniteui/2019.2/latest/css/structure/infragistics.css" rel="stylesheet" />
+
+    <script src="http://ajax.aspnetcdn.com/ajax/modernizr/modernizr-2.8.3.js"></script>
+    <script src="http://code.jquery.com/jquery-1.11.3.min.js"></script>
+    <script src="http://code.jquery.com/ui/1.11.1/jquery-ui.min.js"></script>
+
+    <!-- Ignite UI Required Combined JavaScript Files -->
+    <script src="http://cdn-na.infragistics.com/igniteui/2019.2/latest/js/infragistics.core.js"></script>
+    <script src="http://cdn-na.infragistics.com/igniteui/2019.2/latest/js/infragistics.lob.js"></script>
+    <script src="http://cdn-na.infragistics.com/igniteui/2019.2/latest/js/infragistics.dv.js"></script>
+</head>
+<body>
+
+    <table id="grid"></table>
+
+    <script>
+        var now = new Date();
+
+        var half_an_hour_ago = new Date();
+        half_an_hour_ago.setMinutes(now.getMinutes() -30);
+
+        var an_hour_ago = new Date();
+        an_hour_ago.setHours(now.getHours() -1);
+
+        var a_day_ago = new Date();
+        a_day_ago.setHours(now.getHours() -24);
+
+        var Orders = [
+            { 'ID': 1, 'ProductID': 1, 'qty': 5, 'SubmittedDate': a_day_ago },
+            { 'ID': 2, 'ProductID': 2, 'qty': 3, 'SubmittedDate': an_hour_ago },
+            { 'ID': 3, 'ProductID': 3, 'qty': 2, 'SubmittedDate': half_an_hour_ago }
+        ];
+
+        var Products = [
+            { 'Id': 1, 'Name': '牛乳（1L）' },
+            { 'Id': 2, 'Name': 'コーヒー豆（200g）' },
+            { 'Id': 3, 'Name': 'ガムシロップ（1袋）' },
+        ]
+
+        $(function () {
+
+            //igGrid
+            $("#grid").igGrid({
+                autoGenerateColumns: false,
+                primaryKey: "ID",
+                width: "auto",
+            	autoCommit: true,
+                columns: [
+                    { headerText: "ID", key: "ID", dataType: "number" },
+                    { headerText: "製品", key: "ProductID", dataType: "number", formatter: formatCategoryCombo },
+                    { headerText: "個数", key: "qty", dataType: "number" },
+                    { headerText: "備考", key: "description", dataType: "string" },
+                    { headerText: "登録日時", key: "SubmittedDate", dataType: "date", format: "yyyy/MM/dd HH:mm:ss", },
+                ],
+                dataSource: Orders,
+                features: [
+                    {
+                        name: "Updating",
+                        editRowStarted: function(evt, ui){
+                            if(ui.rowAdding){ // 新規追加行の場合
+                                var editorSubmittedDate = ui.owner.editorForKey("SubmittedDate");
+                                $(editorSubmittedDate).igDateEditor("value", new Date());
+                            } else {
+                                var present = new Date();
+                                var get_an_hour_ago = new Date();
+                                get_an_hour_ago.setHours(present.getHours() -1); //1時間前の時間を取得
+                                var cellValue = $("#grid").igGrid("getCellValue", ui.rowID, 'SubmittedDate'); //選択行の登録日時を取得
+                                if (get_an_hour_ago > cellValue) {
+                                    changeReadOnly(true,ui.rowID); //登録日時が1時間以上前であれば編集不可に
+                                }
+                            }
+                        },
+                        editRowEnded: function (evt, ui) { //行編集終了後
+                            changeReadOnly(false); //編集が終わったタイミングで編集可能な状態に戻しておく
+                        },
+                        columnSettings: [ 
+                            {
+                                columnKey: "ID",
+                                required: true,
+                                readOnly: true,
+                            },
+                            {
+                                columnKey: "ProductID",
+                                editorType: "combo",
+                                required: true,
+                                readOnly: false,
+                                editorOptions: {
+                                    mode: "dropdown",
+                                    dataSource: Products,
+                                    textKey: "Name",
+                                    valueKey: "Id"
+                                }
+                            },
+                            {
+                                columnKey: "qty",
+                                required: true,
+                                readOnly: false,
+                            },
+                            {
+                                columnKey: "SubmittedDate",
+                                editorOptions: {
+                                    readOnly: true,
+                                    disabled: true,
+                                },
+                            },
+                        ]
+                    }
+                ]
+            }); 
+
+        });
+
+        function changeReadOnly(readBool,rowID = NaN) {
+            
+            var updatingColumnSettings = $("#grid").igGridUpdating("option", "columnSettings");
+            updatingColumnSettings[1].readOnly = readBool;
+            updatingColumnSettings[2].readOnly = readBool;
+            $("#grid").igGridUpdating("option", "columnSettings", $.extend(true, [], updatingColumnSettings)); //設定を反映
+            if (readBool) { //行編集時は igGridUpdating を反映すると編集が完了してしまうため編集開始の処理を入れる
+                $("#grid").igGridUpdating("startEdit", rowID, "ReadOnly");
+            }
+            
+        }
+
+        function formatCategoryCombo(val) {
+            var i, type;
+            for (i = 0; i < Products.length; i++) {
+               type = Products[i];        
+               if (type.Id == val) {
+                   val = type.Name;
+               }
+            }
+            return val;
+        }
+
+        //  コンボ用の設定
+        $.ig.CustomComboEditorProvider = $.ig.CustomComboEditorProvider || $.ig.EditorProviderCombo.extend({
+            setSize: function (width, height) {
+                this.editor.element.css({
+                    width: width,
+                    height: height
+                });
+            },
+            getValue: function () {
+                return this.editor.value();
+            },
+            destroy: function () {
+                this.editor.element.remove();
+            }
+        });
+    </script>
+</body>
+</html>
