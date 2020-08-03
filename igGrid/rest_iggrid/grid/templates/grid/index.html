@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ig-grid on Django</title>
+
+    <script src="https://ajax.aspnetcdn.com/ajax/modernizr/modernizr-2.8.3.js"></script>
+    <script src="https://code.jquery.com/jquery-2.1.3.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.10.3/jquery-ui.min.js"></script>
+    <script src="https://cdn-na.infragistics.com/igniteui/2020.1/latest/js/i18n/infragistics-ja.js"></script>
+    <script src="https://cdn-na.infragistics.com/igniteui/2020.1/latest/js/infragistics.core.js"></script>
+    <script src="https://cdn-na.infragistics.com/igniteui/2020.1/latest/js/infragistics.lob.js"></script>
+    <script src="https://igniteui.github.io/help-samples/js/apiviewer.js"></script>
+    <script src="https://cdn-na.infragistics.com/igniteui/2020.1/latest/js/modules/i18n/regional/infragistics.ui.regional-ja.js"></script>
+
+    <!-- Used to add modal loading indicator for igGrid -->
+    <script src="https://www.igniteui.com/js/grid-modal-loading-inicator.js"></script>
+
+    <link href="https://cdn-na.infragistics.com/igniteui/2020.1/latest/css/themes/infragistics/infragistics.theme.css" rel="stylesheet">
+    <link href="https://cdn-na.infragistics.com/igniteui/2020.1/latest/css/structure/infragistics.css" rel="stylesheet">
+    <link href="https://igniteui.github.io/help-samples/css/apiviewer.css" rel="stylesheet" type="text/css">
+
+    <style type="text/css">
+        input.button-style
+        {
+            margin-top: 10px;
+        }
+        #grid {
+            font-size: 12px;
+        }
+    </style>
+
+  </head>
+  <body>
+
+    <div style="max-width:600px;margin:100px auto;">
+        <table id="grid"></table>
+        <input type="button" id="saveChanges" class="button-style" value="Save" />
+        <input type="button" id="undo" class="button-style" value="Undo" />
+        <input type="button" id="redo" class="button-style" value="Redo" />
+    </div>
+
+    <script type="text/javascript">
+
+        $(function () {
+            var ds = new $.ig.RESTDataSource({
+                dataSource : "/api/order/",
+                type: "json",
+                restSettings: {
+                    create: {
+                        url: "/api/order/",
+                        template: "/api/order/"
+                    },
+                    update: {
+                        template: "/api/order/${id}/"
+                    },
+                    remove: {
+                        url: "/api/order/"
+                    }
+                }
+            });
+
+            var grid = $("#grid").igGrid({
+                dataSource: ds,
+                type: "json",
+                columns: [
+                    { headerText: "ID", key: "id", dataType: "number", width: "10%" },
+                    { headerText: "出荷名", key: "Shop", dataType: "string" },
+                    { headerText: "配送先住所", key: "Address", dataType: "string" },
+                    { headerText: "項目の合計数", key: "TotoalNumber", dataType: "number" },
+                    { headerText: "総額", key: "TotalPrice", dataType: "float" },
+                ],
+                primaryKey: "id",
+                autoGenerateColumns: false,
+                features: [
+                    {
+                        name : 'Updating',
+                        enableAddRow: true,
+                        enableDeleteRow: true,
+                        editMode: 'row',
+                        columnSettings: [ {
+                            columnKey: "id",
+                            readOnly: true,
+                        }, {
+                            columnKey: "Shop",
+                            editorType: 'string',
+                            validation: true,
+                        }, {
+                            columnKey: "Address",
+                            editorType: 'string',
+                            validation: true,
+                        }, {
+                            columnKey: "TotoalNumber",
+                            editorType: 'number',
+                            validation: true,
+                        }, {
+                            columnKey: "TotalPrice",
+                            editorType: 'float',
+                            validation: true,
+                        } ]
+                    }
+                ]
+            });
+
+            $("#saveChanges").igButton({ labelText: $("#saveChanges").val(), disabled: true });
+            $("#undo").igButton({ labelText: $("#undo").val(), disabled: true });
+            $("#redo").igButton({ labelText: $("#redo").val(), disabled: true });
+
+            loadingIndicator = new GridModalLoadingIndicator(grid);
+            grid.on("iggriddatabinding", function (e, args) {
+                loadingIndicator.show();
+            });
+            grid.on("iggriddatabound", function (e, args) {
+                loadingIndicator.hide();
+            });
+            grid.on("iggridupdatingrowdeleted", function (e, args) {
+                $("#undo").igButton("option", "disabled", false);
+                $("#saveChanges").igButton("option", "disabled", false);
+            });
+            grid.on("iggridupdatingrowadded", function (e, args) {
+                $("#undo").igButton("option", "disabled", false);
+                $("#saveChanges").igButton("option", "disabled", false);
+            });
+            grid.on("iggridupdatingeditrowended", function (e, args) {
+                if (args.update) {
+                    $("#undo").igButton("option", "disabled", false);
+                    $("#saveChanges").igButton("option", "disabled", false);
+                }
+            });
+
+            $("#undo").on('igbuttonclick',
+                function (e, args) {
+                    updates = $.extend({}, grid.data('igGrid').pendingTransactions());
+                    $.each(updates, function (index, transaction) {
+                        grid.igGrid("rollback", transaction.rowId, true);
+                    });
+                    $("#redo").igButton("option", "disabled", false);
+                    $("#undo").igButton("disable");
+                    $("#saveChanges").igButton("disable");
+                    return false;
+                }
+            );
+
+            $("#redo").on('igbuttonclick',
+                function (e) {
+                    $.each(updates, function (index, transaction) {
+                        switch (transaction.type) {
+                            case "row":
+                                grid.igGridUpdating('updateRow', transaction.rowId, transaction.row, null, false);
+                                break;
+                            case "newrow":
+                                grid.igGridUpdating('addRow', transaction.row, false);
+                                break;
+                            case "deleterow":
+                                grid.igGridUpdating('deleteRow', transaction.rowId, false);
+                                break;
+                        }
+
+                    });
+                    $(this).igButton("disable");
+                    $("#undo").igButton("option", "disabled", false);
+                    $("#saveChanges").igButton("option", "disabled", false);
+                }
+            );
+
+            $.ajaxSetup({
+                beforeSend: function(xhr, settings) {
+                    xhr.setRequestHeader("X-CSRFToken", "{{ csrf_token }}");
+                }
+            });
+
+            $("#saveChanges").on('igbuttonclick',
+                function (e, args) {
+                    loadingIndicator.show();
+                    try {
+                        grid.igGrid("saveChanges",
+                        function (data) {
+                            console.log(data);
+                            loadingIndicator.hide();
+                            $("#undo").igButton("disable");
+                            $("#saveChanges").igButton("disable");
+                            grid.igGrid("commit");
+                            grid.igGrid("dataBind");
+                        },
+                        function (jqXHR, textStatus, errorThrown) {
+                            alert(JSON.stringify(jqXHR));
+                            alert(errorThrown);
+                            alert(JSON.stringify(textStatus));
+                        });
+                    } catch (e) {
+                        alert("error");
+                    }
+                }
+            );
+        });
+    </script>
+
+  </body>
+</html>
